@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+ <head>
+ <meta charset="UTF-8" />
+ <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+ <title>顺滑贪吃蛇</title>
+ <style>
+     * {
+         margin: 0;
+         padding: 0;
+         box-sizing: border-box;
+         font-family: "Microsoft YaHei", sans-serif;
+     }
+     body {
+         min-height: 100vh;
+         display: flex;
+         flex-direction: column;
+         align-items: center;
+         justify-content: center;
+         gap: 16px;
+         background: linear-gradient(135deg, #1e3c72, #2a5298);
+         padding: 20px;
+     }
+     h1 {
+         color: #fff;
+         font-size: 24px;
+         letter-spacing: 2px;
+     }
+     .info {
+         display: flex;
+         gap: 24px;
+         color: #fff;
+         font-size: 18px;
+     }
+     .box {
+         background: rgba(0, 0, 0, 0.35);
+         padding: 12px 24px;
+         border-radius: 12px;
+     }
+     canvas {
+         background: #0f1720;
+         border: 4px solid #fff;
+         border-radius: 16px;
+         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+     }
+     button {
+         padding: 10px 22px;
+         font-size: 16px;
+         color: #fff;
+         background: #ff6b6b;
+         border: none;
+         border-radius: 10px;
+         cursor: pointer;
+         transition: 0.2s;
+     }
+     button:hover {
+         background: #ff4757;
+         transform: translateY(-2px);
+     }
+     .tip {
+         color: #dfe6e9;
+         font-size: 14px;
+     }
+ </style>
+ </head>
+ <body>
+ <h1>🐍顺滑贪吃蛇</h1>
+ <div class="info">
+     <div class="box">分数：<span id="score">0</span></div>
+     <div class="box">最高分：<span id="best">0</span></div>
+ </div>
+ <canvas id="game" width="400" height="400"></canvas>
+ <div>
+     <button id="startBtn">开始 / 重置游戏</button>
+ </div>
+ <div class="tip">方向键控制蛇移动，吃到红色食物得分，撞墙或撞到自己结束</div>
+ <script>
+     const canvas = document.getElementById("game");
+     const ctx = canvas.getContext("2d");
+     const scoreDom = document.getElementById("score");
+     const bestDom = document.getElementById("best");
+     const startBtn = document.getElementById("startBtn");
+     const size = 20;
+     const count = canvas.width / size;
+     // 移动速度：数字越大越慢
+     const STEP_INTERVAL = 180;
+     let snake = [];
+     let food = {};
+     let dir = { x: 1, y: 0 };
+     let score = 0;
+     let isRun = false;
+     let lastStepTime = 0;
+     let best = Number(localStorage.getItem("snakeBest") || 0);
+     bestDom.innerText = best;
+     function initGame() {
+         score = 0;
+         scoreDom.innerText = score;
+         snake = [
+             { x: 8, y: 10 },
+             { x: 7, y: 10 },
+             { x: 6, y: 10 },
+             { x: 5, y: 10 },
+             { x: 4, y: 10 }
+         ];
+         dir = { x: 1, y: 0 };
+         lastStepTime = performance.now();
+         createFood();
+         isRun = true;
+         requestAnimationFrame(gameLoop);
+     }
+     function createFood() {
+         let ok = false;
+         while (!ok) {
+             food.x = Math.floor(Math.random() * count);
+             food.y = Math.floor(Math.random() * count);
+             ok = !snake.some(seg => seg.x === food.x && seg.y === food.y);
+         }
+     }
+     function gameLoop(now) {
+         if (!isRun) return;
+         if (now - lastStepTime >= STEP_INTERVAL) {
+             step();
+             lastStepTime = now;
+         }
+         draw();
+         requestAnimationFrame(gameLoop);
+     }
+     function step() {
+         const head = {
+             x: snake[0].x + dir.x,
+             y: snake[0].y + dir.y
+         };
+         if (head.x < 0 || head.y < 0 || head.x >= count || head.y >= count) {
+             return gameOver();
+         }
+         if (snake.some(seg => seg.x === head.x && seg.y === head.y)) {
+             return gameOver();
+         }
+         snake.unshift(head);
+         if (head.x === food.x && head.y === food.y) {
+             score += 10;
+             scoreDom.innerText = score;
+             createFood();
+         } else {
+             snake.pop();
+         }
+     }
+     function draw() {
+         // 背景
+         ctx.fillStyle = "#0f1720";
+         ctx.fillRect(0, 0, canvas.width, canvas.height);
+         // 网格
+         ctx.strokeStyle = "rgba(255,255,255,0.05)";
+         ctx.lineWidth = 1;
+         for (let i = 0; i <= count; i++) {
+             ctx.beginPath();
+             ctx.moveTo(i * size, 0);
+             ctx.lineTo(i * size, canvas.height);
+             ctx.stroke();
+             ctx.beginPath();
+             ctx.moveTo(0, i * size,0);
+             ctx.lineTo(canvas.width, i * size);
+             ctx.stroke();
+         }
+         // 食物：呼吸光
+         const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 220);
+         ctx.shadowBlur = 14 + pulse * 10;
+         ctx.shadowColor = "#ff4d4d";
+         ctx.fillStyle = "#ff4d4d";
+         ctx.beginPath();
+         ctx.arc(
+             food.x * size + size / 2,
+             food.y * size + size / 2,
+             size / 2 - 3,
+             0,
+             Math.PI * 2
+         );
+         ctx.fill();
+         ctx.shadowBlur = 0;
+         // 蛇身体：连续圆角长条
+         if (snake.length === 0) return;
+         ctx.lineCap = "round";
+         ctx.lineJoin = "round";
+         // 身体外轮廓
+         ctx.lineWidth = size - 4;
+         ctx.strokeStyle = "#2ecc71";
+         ctx.beginPath();
+         ctx.moveTo(
+             snake[0].x * size + size / 2,
+             snake[0].y * size + size / 2
+         );
+         for (let i = 1; i < snake.length; i++) {
+             ctx.lineTo(
+                 snake[i].x * size + size / 2,
+                 snake[i].y * size + size / 2
+             );
+         }
+         ctx.stroke();
+         // 身体内芯，做出层次
+         ctx.lineWidth = size - 8;
+         ctx.strokeStyle = "#7cff7c";
+         ctx.beginPath();
+         ctx.moveTo(
+             snake[0].x * size + size / 2,
+             snake[0].y * size + size / 2
+         );
+         for (let i = 1; i < snake.length; i++) {
+             ctx.lineTo(
+                 snake[i].x * size + size / 2,
+                 snake[i].y * size + size / 2
+             );
+         }
+         ctx.stroke();
+         // 蛇头
+         const head = snake[0];
+         ctx.fillStyle = "#7cff7c";
+         ctx.beginPath();
+         ctx.arc(
+             head.x * size + size / 2,
+             head.y * size + size / 2,
+             size / 2 - 1,
+             0,
+             Math.PI * 2
+         );
+         ctx.fill();
+         // 蛇头轮廓
+         ctx.lineWidth = 2;
+         ctx.strokeStyle = "#27ae60";
+         ctx.stroke();
+         // 眼睛
+         const eyeOffset = 4;
+         let e1x, e1y, e2x, e2y;
+         if (dir.x === 1) {
+             e1x = head.x * size + size - eyeOffset;
+             e1y = head.y * size + 5;
+             e2x = head.x * size + size - eyeOffset;
+             e2y = head.y * size + size - 5;
+         } else if (dir.x === -1) {
+             e1x = head.x * size + eyeOffset;
+             e1y = head.y * size + 5;
+             e2x = head.x * size + eyeOffset;
+             e2y = head.y * size + size - 5;
+         } else if (dir.y === -1) {
+             e1x = head.x * size + 5;
+             e1y = head.y * size + eyeOffset;
+             e2x = head.x * size + size - 5;
+             e2y = head.y * size + eyeOffset;
+         } else {
+             e1x = head.x * size + 5;
+             e1y = head.y * size + size - eyeOffset;
+             e2x = head.x * size + size - 5;
+             e2y = head.y * size + size - eyeOffset;
+         }
+         ctx.fillStyle = "#000";
+         ctx.beginPath();
+         ctx.arc(e1x, e1y, 2, 0, Math.PI * 2);
+         ctx.arc(e2x, e2y, 2, 0, Math.PI * 2);
+         ctx.fill();
+     }
+     function gameOver() {
+         isRun = false;
+         if (score > best) {
+             best = score;
+             localStorage.setItem("snakeBest", best);
+             bestDom.innerText = best;
+         }
+         setTimeout(() => {
+             alert("游戏结束！本局分数：" + score);
+         }, 100);
+     }
+     document.addEventListener("keydown", e => {
+         if (!isRun) return;
+         switch (e.key) {
+             case "ArrowUp":
+                 if (dir.y !== 1) dir = { x: 0, y: -1 };
+                 break;
+             case "ArrowDown":
+                 if (dir.y !== -1) dir = { x: 0, y: 1 };
+                 break;
+             case "ArrowLeft":
+                 if (dir.x !== 1) dir = { x: -1, y: 0 };
+                 break;
+             case "ArrowRight":
+                 if (dir.x !== -1) dir = { x: 1, y: 0 };
+                 break;
+         }
+     });
+     startBtn.addEventListener("click", initGame);
+ </script>
+ </body>
+ </html>
